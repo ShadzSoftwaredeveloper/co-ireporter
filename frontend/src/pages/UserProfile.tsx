@@ -1,11 +1,11 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import { User, Mail, Calendar, FileText, CheckCircle, Clock, XCircle, Edit, Upload, Camera } from 'lucide-react';
+import { User, Mail, Calendar, FileText, CheckCircle, Clock, XCircle, Edit, Upload, Camera, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import {
   Dialog,
@@ -17,7 +17,7 @@ import {
 } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 
@@ -31,11 +31,28 @@ export const UserProfile: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState('');
+  const [fetchingIncidents, setFetchingIncidents] = useState(false);
+  const [userIncidents, setUserIncidents] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const userIncidents = useMemo(() => {
-    return user ? getUserIncidents(user.id) : [];
-  }, [user, getUserIncidents]);
+  useEffect(() => {
+    const fetchUserIncidents = async () => {
+      if (!user?.id) return;
+      try {
+        setFetchingIncidents(true);
+        const incidents = await getUserIncidents(user.id);
+        setUserIncidents(incidents || []);
+      } catch (err) {
+        console.error('Error fetching user incidents:', err);
+        toast.error('Failed to fetch your incidents');
+        setUserIncidents([]);
+      } finally {
+        setFetchingIncidents(false);
+      }
+    };
+
+    fetchUserIncidents();
+  }, [user?.id, getUserIncidents]);
 
   const stats = useMemo(() => {
     const resolved = userIncidents.filter(i => i.status === 'resolved').length;
@@ -50,7 +67,7 @@ export const UserProfile: React.FC = () => {
 
   const recentIncidents = useMemo(() => {
     return [...userIncidents]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5);
   }, [userIncidents]);
 
@@ -58,7 +75,7 @@ export const UserProfile: React.FC = () => {
     if (user) {
       setEditName(user.name);
       setEditEmail(user.email);
-      setEditProfilePicture(user.profilePicture || '');
+      setEditProfilePicture((user as any).profile_picture || '');
       setError('');
       setIsEditDialogOpen(true);
     }
@@ -211,7 +228,7 @@ export const UserProfile: React.FC = () => {
                     className="relative block focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded-full"
                   >
                     <Avatar className="w-16 h-16">
-                      <AvatarImage src={user.profilePicture} alt={user.name} />
+                      <AvatarImage src={(user as any).profile_picture} alt={user.name} />
                       <AvatarFallback className="bg-red-100 text-red-600">
                         {getInitials(user.name)}
                       </AvatarFallback>
@@ -221,7 +238,7 @@ export const UserProfile: React.FC = () => {
                     </div>
                     {uploadingImage && (
                       <div className="absolute inset-0 bg-black bg-opacity-60 rounded-full flex items-center justify-center">
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <Loader2 className="w-5 h-5 animate-spin text-white" />
                       </div>
                     )}
                   </button>
@@ -246,7 +263,7 @@ export const UserProfile: React.FC = () => {
                   <Calendar className="w-4 h-4 text-gray-400 mt-0.5" />
                   <div>
                     <p className="text-sm text-gray-500">Member Since</p>
-                    <p className="text-gray-900">{formatDate(user.createdAt)}</p>
+                    <p className="text-gray-900">{formatDate((user as any).created_at)}</p>
                   </div>
                 </div>
 
@@ -278,7 +295,7 @@ export const UserProfile: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-green-600 mb-1">Resolved</p>
-                      <p className="text-green-900">{stats.resolved}</p>
+                      <p className="text-2xl font-bold text-green-900">{stats.resolved}</p>
                     </div>
                     <CheckCircle className="w-8 h-8 text-green-600" />
                   </div>
@@ -290,7 +307,7 @@ export const UserProfile: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-blue-600 mb-1">Unresolved</p>
-                      <p className="text-blue-900">{stats.unresolved}</p>
+                      <p className="text-2xl font-bold text-blue-900">{stats.unresolved}</p>
                     </div>
                     <Clock className="w-8 h-8 text-blue-600" />
                   </div>
@@ -303,7 +320,7 @@ export const UserProfile: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-red-600 mb-1">Rejected</p>
-                      <p className="text-red-900">{stats.rejected}</p>
+                      <p className="text-2xl font-bold text-red-900">{stats.rejected}</p>
                     </div>
                     <XCircle className="w-8 h-8 text-red-600" />
                   </div>
@@ -323,7 +340,14 @@ export const UserProfile: React.FC = () => {
             
             <Card>
               <CardContent className="p-0">
-                {recentIncidents.length > 0 ? (
+                {fetchingIncidents ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-center">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-blue-600" />
+                      <p className="text-gray-600">Loading your incidents...</p>
+                    </div>
+                  </div>
+                ) : recentIncidents.length > 0 ? (
                   <div className="divide-y">
                     {recentIncidents.map((incident) => (
                       <Link
@@ -353,11 +377,11 @@ export const UserProfile: React.FC = () => {
                                     : 'border-blue-300 text-blue-700'
                                 }
                               >
-                                {incident.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                {incident.status.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                               </Badge>
                             </div>
                             <p className="text-gray-900 truncate">{incident.title}</p>
-                            <p className="text-sm text-gray-500">{formatDate(incident.createdAt)}</p>
+                            <p className="text-sm text-gray-500">{formatDate(incident.created_at)}</p>
                           </div>
                         </div>
                       </Link>
@@ -446,7 +470,14 @@ export const UserProfile: React.FC = () => {
             )}
             <DialogFooter className="mt-4">
               <Button type="submit" disabled={loading}>
-                {loading ? 'Saving...' : 'Save'}
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </Button>
             </DialogFooter>
           </form>
