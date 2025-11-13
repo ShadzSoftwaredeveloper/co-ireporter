@@ -1,6 +1,7 @@
 import express from 'express';
 import { pool } from '../config/database.js'; // Adjust path as needed
 import { authenticateToken } from '../middleware/auth.js'; // Adjust path as needed
+import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
@@ -59,8 +60,13 @@ router.post('/', authenticateToken, async (req, res) => {
         await connection.beginTransaction();
         console.log('✅ Transaction started');
   
+        // Generate UUID for incident (table uses UUID primary key, not auto-increment)
+        const incidentId = uuidv4();
+        console.log('🆔 Generated UUID for incident:', incidentId);
+  
         // Prepare parameters with null checks
         const insertParams = [
+          incidentId,
           type || null,
           title || null,
           description || null,
@@ -88,14 +94,13 @@ router.post('/', authenticateToken, async (req, res) => {
   
         const insertQuery = `
           INSERT INTO incidents 
-          (type, title, description, location_lat, location_lng, location_address, status, user_id) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          (id, type, title, description, location_lat, location_lng, location_address, status, user_id) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
   
         console.log('📝 Executing INSERT query:', insertQuery);
         
         const [incidentResult] = await connection.execute(insertQuery, insertParams);
-        const incidentId = incidentResult.insertId;
   
         console.log('✅ Incident inserted with ID:', incidentId);
   
