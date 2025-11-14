@@ -28,6 +28,7 @@ export const UserProfile: React.FC = () => {
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editProfilePicture, setEditProfilePicture] = useState('');
+  const [profilePictureSrc, setProfilePictureSrc] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState('');
@@ -53,6 +54,14 @@ export const UserProfile: React.FC = () => {
 
     fetchUserIncidents();
   }, [user?.id, getUserIncidents]);
+
+  // Keep a local profilePictureSrc in sync with the auth user so the avatar
+  // updates immediately when the backend returns the updated user.
+  // Use this to trigger key change on Avatar component to force re-render.
+  useEffect(() => {
+    const pic = (user as any)?.profile_picture || '';
+    setProfilePictureSrc(pic);
+  }, [user?.profile_picture]);
 
   const stats = useMemo(() => {
     const resolved = userIncidents.filter(i => i.status === 'resolved').length;
@@ -243,8 +252,8 @@ export const UserProfile: React.FC = () => {
                     disabled={uploadingImage}
                     className="relative block focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded-full"
                   >
-                    <Avatar className="w-16 h-16">
-                      <AvatarImage src={(user as any).profile_picture} alt={user.name} />
+                    <Avatar className="w-16 h-16" key={profilePictureSrc}>
+                      <AvatarImage src={profilePictureSrc || (user as any).profile_picture} alt={user.name} />
                       <AvatarFallback className="bg-red-100 text-red-600">
                         {getInitials(user.name)}
                       </AvatarFallback>
