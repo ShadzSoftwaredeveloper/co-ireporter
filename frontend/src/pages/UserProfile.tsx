@@ -5,7 +5,7 @@ import { useData } from '../contexts/DataContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import { User, Mail, Calendar, FileText, CheckCircle, Clock, XCircle, Edit, Upload, Camera } from 'lucide-react';
+import { User, Mail, Calendar, FileText, CheckCircle, Clock, XCircle, Edit, Upload, Camera, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import {
   Dialog,
@@ -27,6 +27,7 @@ export const UserProfile: React.FC = () => {
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editProfilePicture, setEditProfilePicture] = useState('');
+  const [profilePictureSrc, setProfilePictureSrc] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState('');
@@ -67,7 +68,7 @@ export const UserProfile: React.FC = () => {
 
   const recentIncidents = useMemo(() => {
     return [...userIncidents]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5);
   }, [userIncidents]);
 
@@ -75,7 +76,7 @@ export const UserProfile: React.FC = () => {
     if (user) {
       setEditName(user.name);
       setEditEmail(user.email);
-      setEditProfilePicture(user.profilePicture || '');
+      setEditProfilePicture((user as any).profile_picture || '');
       setError('');
       setIsEditDialogOpen(true);
     }
@@ -104,12 +105,22 @@ export const UserProfile: React.FC = () => {
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64Image = reader.result as string;
+        let base64Image = reader.result as string;
+        
+        // If base64 is too large, try to compress
+        if (base64Image.length > 1000000) { // 1MB in characters
+          toast.error('Image too large. Please choose a smaller image.');
+          setUploadingImage(false);
+          return;
+        }
+
         try {
           await updateProfile(user.name, user.email, base64Image);
           toast.success('Profile picture updated successfully!');
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Failed to update profile picture');
+          const errorMsg = err instanceof Error ? err.message : 'Failed to update profile picture';
+          toast.error(errorMsg);
+          console.error('Profile update error:', err);
         } finally {
           setUploadingImage(false);
         }
@@ -144,7 +155,13 @@ export const UserProfile: React.FC = () => {
 
       const reader = new FileReader();
       reader.onloadend = () => {
-        setEditProfilePicture(reader.result as string);
+        const base64 = reader.result as string;
+        // Check base64 size
+        if (base64.length > 1000000) {
+          setError('Image too large after conversion. Please choose a smaller image.');
+          return;
+        }
+        setEditProfilePicture(base64);
         setError('');
       };
       reader.readAsDataURL(file);
@@ -220,8 +237,8 @@ export const UserProfile: React.FC = () => {
                     disabled={uploadingImage}
                     className="relative block focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 rounded-full"
                   >
-                    <Avatar className="w-16 h-16">
-                      <AvatarImage src={user.profilePicture} alt={user.name} />
+                    <Avatar className="w-16 h-16" key={profilePictureSrc}>
+                      <AvatarImage src={profilePictureSrc || (user as any).profile_picture} alt={user.name} />
                       <AvatarFallback className="bg-red-100 text-red-600">
                         {getInitials(user.name)}
                       </AvatarFallback>
@@ -231,7 +248,7 @@ export const UserProfile: React.FC = () => {
                     </div>
                     {uploadingImage && (
                       <div className="absolute inset-0 bg-black bg-opacity-60 rounded-full flex items-center justify-center">
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <Loader2 className="w-5 h-5 animate-spin text-white" />
                       </div>
                     )}
                   </button>
@@ -256,7 +273,7 @@ export const UserProfile: React.FC = () => {
                   <Calendar className="w-4 h-4 text-gray-400 mt-0.5" />
                   <div>
                     <p className="text-sm text-gray-500">Member Since</p>
-                    <p className="text-gray-900">{formatDate(user.createdAt)}</p>
+                    <p className="text-gray-900">{formatDate((user as any).created_at)}</p>
                   </div>
                 </div>
 
@@ -286,7 +303,7 @@ export const UserProfile: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-green-600 mb-1">Resolved</p>
-                      <p className="text-green-900">{stats.resolved}</p>
+                      <p className="text-2xl font-bold text-green-900">{stats.resolved}</p>
                     </div>
                     <CheckCircle className="w-8 h-8 text-green-600" />
                   </div>
@@ -298,7 +315,7 @@ export const UserProfile: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-blue-600 mb-1">Unresolved</p>
-                      <p className="text-blue-900">{stats.unresolved}</p>
+                      <p className="text-2xl font-bold text-blue-900">{stats.unresolved}</p>
                     </div>
                     <Clock className="w-8 h-8 text-blue-600" />
                   </div>
@@ -311,7 +328,7 @@ export const UserProfile: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-red-600 mb-1">Rejected</p>
-                      <p className="text-red-900">{stats.rejected}</p>
+                      <p className="text-2xl font-bold text-red-900">{stats.rejected}</p>
                     </div>
                     <XCircle className="w-8 h-8 text-red-600" />
                   </div>
@@ -365,11 +382,11 @@ export const UserProfile: React.FC = () => {
                                     : 'border-blue-300 text-blue-700'
                                 }
                               >
-                                {incident.status.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                {incident.status.split('-').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
                               </Badge>
                             </div>
                             <p className="text-gray-900 truncate">{incident.title}</p>
-                            <p className="text-sm text-gray-500">{formatDate(incident.createdAt)}</p>
+                            <p className="text-sm text-gray-500">{formatDate(incident.created_at)}</p>
                           </div>
                         </div>
                       </Link>
@@ -457,7 +474,14 @@ export const UserProfile: React.FC = () => {
             )}
             <DialogFooter className="mt-4">
               <Button type="submit" disabled={loading}>
-                {loading ? 'Saving...' : 'Save'}
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save'
+                )}
               </Button>
             </DialogFooter>
           </form>

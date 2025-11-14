@@ -99,3 +99,4 @@ validation and file upload restrictions. Configure Multer middleware
 Day 3 – Database Design Design MySQL database schema: Users, Roles, Incidents,
 Files, OTPs. Set up database connection in JavaScript. Create migration or SQL
 script for initial tables.
+

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 interface Location {
   lat: number;
@@ -125,7 +125,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     return transformed;
   };
 
-  const refreshIncidents = async () => {
+  const refreshIncidents = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -149,13 +149,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshIncidents();
   }, []);
 
-  const createIncident = async (incident: Omit<Incident, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => {
+  const createIncident = useCallback(async (incident: Omit<Incident, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'user_name' | 'user_email'>) => {
     setLoading(true);
     setError(null);
     
@@ -199,16 +199,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [refreshIncidents]);
 
-  const updateIncident = async (id: string, updates: Partial<Incident>) => {
+  const updateIncident = useCallback(async (id: string, updates: Partial<Incident>) => {
     setError(null);
     
     try {
       const backendUpdates: any = {};
       
       if (updates.status) backendUpdates.status = updates.status;
-      if (updates.adminComment !== undefined) backendUpdates.adminComment = updates.adminComment;
+      if ((updates as any).admin_comment !== undefined) backendUpdates.adminComment = (updates as any).admin_comment;
 
       console.log('🔄 Updating incident:', id, backendUpdates);
 
@@ -230,9 +230,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       setError(error instanceof Error ? error.message : 'Failed to update incident');
       throw error;
     }
-  };
+  }, [refreshIncidents]);
 
-  const deleteIncident = async (id: string) => {
+  const deleteIncident = useCallback(async (id: string) => {
     setError(null);
     
     try {
@@ -254,9 +254,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       setError(error instanceof Error ? error.message : 'Failed to delete incident');
       throw error;
     }
-  };
+  }, [refreshIncidents]);
 
-  const getIncidentById = async (id: string): Promise<Incident | null> => {
+  const getIncidentById = useCallback(async (id: string): Promise<Incident | null> => {
     try {
       const headers = getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/incidents/${id}`, {
@@ -275,9 +275,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       console.error('❌ Error fetching incident:', error);
       return null;
     }
-  };
+  }, []);
 
-  const getUserIncidents = async (userId: string): Promise<Incident[]> => {
+  const getUserIncidents = useCallback(async (userId: string): Promise<Incident[]> => {
     try {
       const headers = getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/incidents/user/${userId}`, {
@@ -295,7 +295,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       console.error('❌ Error fetching user incidents:', error);
       throw error;
     }
-  };
+  }, []);
 
   return (
     <DataContext.Provider

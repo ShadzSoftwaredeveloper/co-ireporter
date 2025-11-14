@@ -1,5 +1,5 @@
-import React from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -7,22 +7,83 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { MediaGallery } from '../components/MediaGallery';
 import { IncidentStatus } from '../types';
-import { MapPin, Calendar, ArrowLeft, Trash2, Edit } from 'lucide-react';
+import { MapPin, Calendar, ArrowLeft, Trash2, Edit, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '../components/ui/alert';
+import { toast } from 'sonner';
+
+interface Incident {
+  id: string;
+  type: 'red-flag' | 'intervention';
+  title: string;
+  description: string;
+  location: {
+    lat: number;
+    lng: number;
+    address?: string;
+  };
+  media: Array<{ id: string; type: 'image' | 'video'; url: string }>;
+  status: IncidentStatus;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+  user_name?: string;
+  user_email?: string;
+  admin_comment?: string;
+}
 
 export const IncidentDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getIncidentById, deleteIncident } = useData();
   const { user } = useAuth();
+  const [incident, setIncident] = useState<Incident | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  const incident = id ? getIncidentById(id) : undefined;
+  useEffect(() => {
+    const fetchIncident = async () => {
+      if (!id) {
+        setError('No incident ID provided');
+        setLoading(false);
+        return;
+      }
 
-  if (!incident) {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await getIncidentById(id);
+        if (!data) {
+          setError('Incident not found');
+        } else {
+          setIncident(data);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch incident');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchIncident();
+  }, [id, getIncidentById]);
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto flex items-center justify-center py-12">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-blue-600" />
+          <p className="text-gray-600">Loading incident details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !incident) {
     return (
       <div className="max-w-4xl mx-auto">
         <Alert variant="destructive">
-          <AlertDescription>Incident not found</AlertDescription>
+          <AlertDescription>{error || 'Incident not found'}</AlertDescription>
         </Alert>
         <Button onClick={() => navigate('/incidents')} className="mt-4">
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -48,8 +109,8 @@ export const IncidentDetail: React.FC = () => {
   };
 
   const getTypeColor = (type: string) => {
-    return type === 'red-flag' 
-      ? 'bg-red-100 text-red-800' 
+    return type === 'red-flag'
+      ? 'bg-red-100 text-red-800'
       : 'bg-orange-100 text-orange-800';
   };
 
@@ -63,14 +124,22 @@ export const IncidentDetail: React.FC = () => {
     });
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (window.confirm('Are you sure you want to delete this incident?')) {
-      deleteIncident(incident.id);
-      navigate('/incidents');
+      try {
+        setDeleting(true);
+        await deleteIncident(incident.id);
+        toast.success('Incident deleted successfully');
+        navigate('/incidents');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to delete incident');
+      } finally {
+        setDeleting(false);
+      }
     }
   };
 
-  const isOwner = user?.id === incident.userId;
+  const isOwner = user?.id === incident.user_id;
   const isAdmin = user?.role === 'admin';
 
   return (
@@ -90,9 +159,23 @@ export const IncidentDetail: React.FC = () => {
               </Button>
             )}
             {(isOwner || isAdmin) && (
-              <Button variant="destructive" size="sm" onClick={handleDelete}>
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </>
+                )}
               </Button>
             )}
           </div>
@@ -125,24 +208,24 @@ export const IncidentDetail: React.FC = () => {
               <Calendar className="w-4 h-4" />
               <div>
                 <p className="text-sm text-gray-500">Created</p>
-                <p>{formatDate(incident.createdAt)}</p>
+                <p>{formatDate(incident.created_at)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-gray-600">
               <Calendar className="w-4 h-4" />
               <div>
                 <p className="text-sm text-gray-500">Last Updated</p>
-                <p>{formatDate(incident.updatedAt)}</p>
+                <p>{formatDate(incident.updated_at)}</p>
               </div>
             </div>
           </div>
 
           {/* Admin Comment */}
-          {incident.adminComment && (
+          {incident.admin_comment && (
             <Alert>
               <AlertDescription>
                 <p className="text-sm text-gray-500 mb-1">Admin Comment:</p>
-                <p>{incident.adminComment}</p>
+                <p>{incident.admin_comment}</p>
               </AlertDescription>
             </Alert>
           )}
@@ -169,14 +252,12 @@ export const IncidentDetail: React.FC = () => {
                 <p className="text-gray-900">{incident.location.lng.toFixed(6)}</p>
               </div>
             </div>
-            
             {incident.location.address && (
               <div>
                 <p className="text-sm text-gray-500">Address</p>
                 <p className="text-gray-900">{incident.location.address}</p>
               </div>
             )}
-
             {/* Map Display */}
             <div className="relative w-full h-96 bg-gradient-to-br from-blue-100 via-green-50 to-yellow-50 rounded-lg border-2 border-gray-300 overflow-hidden">
               {/* Marker */}
@@ -189,7 +270,6 @@ export const IncidentDetail: React.FC = () => {
               >
                 <MapPin className="w-8 h-8 text-red-600 fill-red-500" />
               </div>
-              
               {/* Coordinates display */}
               <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white px-4 py-2 text-sm">
                 <div className="flex justify-between items-center">
@@ -205,7 +285,7 @@ export const IncidentDetail: React.FC = () => {
       </Card>
 
       {/* Media */}
-      {incident.media.length > 0 && (
+      {incident.media && incident.media.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Media Evidence</CardTitle>
