@@ -62,6 +62,19 @@ router.put('/profile', authenticateToken, async (req, res) => {
       }
     }
 
+    // Validate and process profile picture if provided
+    let processedProfilePicture = profile_picture;
+    if (profile_picture !== undefined && profile_picture !== null) {
+      // Check if it's a base64 string and limit its size
+      if (typeof profile_picture === 'string') {
+        // Base64 strings are typically 33% larger than binary, so limit to keep DB column manageable
+        // If base64 string is > 1MB, truncate or reject
+        if (profile_picture.length > 1048576) { // 1MB in characters
+          return res.status(400).json({ error: 'Profile picture is too large. Maximum 1MB.' });
+        }
+      }
+    }
+
     const updates = [];
     const params = [];
 
@@ -77,7 +90,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
 
     if (profile_picture !== undefined) {
       updates.push('profile_picture = ?');
-      params.push(profile_picture);
+      params.push(processedProfilePicture);
     }
 
     if (updates.length === 0) {
@@ -100,7 +113,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
     res.json(users[0]);
   } catch (error) {
     console.error('Update profile error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error: ' + error.message });
   }
 });
 

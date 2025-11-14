@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 interface Location {
   lat: number;
@@ -21,15 +21,17 @@ interface Incident {
   location: Location;
   media: MediaFile[];
   status: 'draft' | 'under-investigation' | 'resolved' | 'rejected';
-  createdAt: string;
-  updatedAt: string;
-  userId: string;
-  adminComment?: string;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+  user_name?: string;
+  user_email?: string;
+  admin_comment?: string;
 }
 
 interface DataContextType {
   incidents: Incident[];
-  createIncident: (incident: Omit<Incident, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => Promise<void>;
+  createIncident: (incident: Omit<Incident, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'user_name' | 'user_email'>) => Promise<void>;
   updateIncident: (id: string, updates: Partial<Incident>) => Promise<void>;
   deleteIncident: (id: string) => Promise<void>;
   getIncidentById: (id: string) => Promise<Incident | null>;
@@ -72,10 +74,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   };
 
   const transformIncidentFromBackend = (incident: any): Incident => {
-    console.log('🔄 Transforming incident from backend:', incident);
-    
     return {
-      id: incident.id.toString(),
+      id: incident.id,
       type: incident.type,
       title: incident.title,
       description: incident.description,
@@ -84,23 +84,21 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         lng: parseFloat(incident.location_lng),
         address: incident.location_address
       },
-      media: incident.media ? incident.media.map((media: any) => ({
-        id: media.id.toString(),
-        type: media.type,
-        url: media.url,
-        thumbnail: media.thumbnail
-      })) : [],
+      media: incident.media || [],
       status: incident.status,
-      createdAt: incident.created_at,
-      updatedAt: incident.updated_at,
-      userId: incident.user_id.toString(),
-      adminComment: incident.admin_comment
+      created_at: incident.created_at,
+      updated_at: incident.updated_at,
+      user_id: incident.user_id,
+      user_name: incident.user_name,
+      user_email: incident.user_email,
+      admin_comment: incident.admin_comment
     };
   };
 
   const transformIncidentToBackend = (incident: any) => {
     console.log('🔄 Transforming incident for backend - Original data:', incident);
     
+    // Validate and provide defaults for all fields
     const transformed = {
       type: incident.type || 'red-flag',
       title: incident.title || '',
@@ -116,16 +114,21 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
     console.log('🔄 Transformed incident for backend:', transformed);
     
+    // Validate no undefined values
     Object.entries(transformed).forEach(([key, value]) => {
       if (value === undefined) {
         console.error(`❌ ERROR: ${key} is undefined in transformed data!`);
       }
     });
 
+    if (transformed.location.lat === undefined || transformed.location.lng === undefined) {
+      console.error('❌ ERROR: Location coordinates are undefined!');
+    }
+
     return transformed;
   };
 
-  const refreshIncidents = async () => {
+  const refreshIncidents = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -139,23 +142,21 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       }
 
       const data = await response.json();
-      console.log('✅ Fetched incidents from backend:', data);
       const transformedIncidents = data.map(transformIncidentFromBackend);
-      console.log('✅ Transformed incidents:', transformedIncidents);
       setIncidents(transformedIncidents);
     } catch (error) {
-      console.error('❌ Error fetching incidents:', error);
+      console.error('Error fetching incidents:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch incidents');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshIncidents();
   }, []);
 
-  const createIncident = async (incident: Omit<Incident, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => {
+  const createIncident = useCallback(async (incident: Omit<Incident, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'user_name' | 'user_email'>) => {
     setLoading(true);
     setError(null);
     
@@ -166,6 +167,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       const backendIncident = transformIncidentToBackend(incident);
       
       console.log('📤 Sending to backend:', backendIncident);
+      console.log('📤 JSON stringified:', JSON.stringify(backendIncident));
 
       const headers = getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/incidents`, {
@@ -199,23 +201,20 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [refreshIncidents]);
 
-  const updateIncident = async (id: string, updates: Partial<Incident>) => {
+  const updateIncident = useCallback(async (id: string, updates: Partial<Incident>) => {
     setError(null);
     
     try {
       const backendUpdates: any = {};
       
       if (updates.status) backendUpdates.status = updates.status;
-      if (updates.adminComment !== undefined) backendUpdates.adminComment = updates.adminComment;
+      if ((updates as any).admin_comment !== undefined) backendUpdates.adminComment = (updates as any).admin_comment;
 
-      console.log('🔄 Updating incident:', id, backendUpdates);
-
-      const headers = getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/incidents/${id}`, {
         method: 'PUT',
-        headers: headers,
+        headers: getAuthHeaders(),
         body: JSON.stringify(backendUpdates),
       });
 
@@ -226,21 +225,19 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
       await refreshIncidents();
     } catch (error) {
-      console.error('❌ Error updating incident:', error);
+      console.error('Error updating incident:', error);
       setError(error instanceof Error ? error.message : 'Failed to update incident');
       throw error;
     }
-  };
+  }, [refreshIncidents]);
 
-  const deleteIncident = async (id: string) => {
+  const deleteIncident = useCallback(async (id: string) => {
     setError(null);
     
     try {
-      console.log('🗑️ Deleting incident:', id);
-      const headers = getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/incidents/${id}`, {
         method: 'DELETE',
-        headers: headers,
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -250,38 +247,34 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
       await refreshIncidents();
     } catch (error) {
-      console.error('❌ Error deleting incident:', error);
+      console.error('Error deleting incident:', error);
       setError(error instanceof Error ? error.message : 'Failed to delete incident');
       throw error;
     }
-  };
+  }, [refreshIncidents]);
 
-  const getIncidentById = async (id: string): Promise<Incident | null> => {
+  const getIncidentById = useCallback(async (id: string): Promise<Incident | null> => {
     try {
-      const headers = getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/incidents/${id}`, {
-        headers: headers,
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
-        console.error(`❌ Failed to fetch incident ${id}: ${response.status}`);
         return null;
       }
 
       const incident = await response.json();
-      console.log('✅ Fetched incident:', incident);
       return transformIncidentFromBackend(incident);
     } catch (error) {
-      console.error('❌ Error fetching incident:', error);
+      console.error('Error fetching incident:', error);
       return null;
     }
-  };
+  }, []);
 
-  const getUserIncidents = async (userId: string): Promise<Incident[]> => {
+  const getUserIncidents = useCallback(async (userId: string): Promise<Incident[]> => {
     try {
-      const headers = getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/incidents/user/${userId}`, {
-        headers: headers,
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -289,13 +282,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       }
 
       const data = await response.json();
-      console.log('✅ User incidents from backend:', data);
       return data.map(transformIncidentFromBackend);
     } catch (error) {
-      console.error('❌ Error fetching user incidents:', error);
+      console.error('Error fetching user incidents:', error);
       throw error;
     }
-  };
+  }, []);
 
   return (
     <DataContext.Provider
