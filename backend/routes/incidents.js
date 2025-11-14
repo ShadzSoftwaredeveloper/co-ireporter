@@ -230,6 +230,35 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Get user's incidents
+router.get('/user/:userId', authenticateToken, async (req, res) => {
+  const userId = req.params.userId;
+  try {
+    const connection = await pool.getConnection();
+    try {
+      const [incidents] = await connection.execute(
+        'SELECT i.*, u.name as user_name, u.email as user_email FROM incidents i LEFT JOIN users u ON i.user_id = u.id WHERE i.user_id = ? ORDER BY i.created_at DESC',
+        [userId]
+      );
+
+      // Attach media for each incident
+      for (const incident of incidents) {
+        const [mediaFiles] = await connection.execute('SELECT id, type, url, thumbnail FROM media_files WHERE incident_id = ?', [incident.id]);
+        incident.media = mediaFiles;
+      }
+
+      connection.release();
+      res.json(incidents);
+    } catch (err) {
+      connection.release();
+      throw err;
+    }
+  } catch (error) {
+    console.error('Get user incidents error:', error);
+    res.status(500).json({ error: 'Failed to fetch user incidents' });
+  }
+});
+
 // Update incident (admin can update status and add admin comment)
 router.put('/:id', authenticateToken, async (req, res) => {
   const incidentId = req.params.id;

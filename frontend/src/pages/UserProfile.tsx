@@ -89,9 +89,9 @@ export const UserProfile: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // Check file size (limit to 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Image size must be less than 2MB');
+    // Check file size (limit to 500KB for upload)
+    if (file.size > 500 * 1024) {
+      toast.error('Image size must be less than 500KB');
       return;
     }
 
@@ -106,12 +106,22 @@ export const UserProfile: React.FC = () => {
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64Image = reader.result as string;
+        let base64Image = reader.result as string;
+        
+        // If base64 is too large, try to compress
+        if (base64Image.length > 1000000) { // 1MB in characters
+          toast.error('Image too large. Please choose a smaller image.');
+          setUploadingImage(false);
+          return;
+        }
+
         try {
           await updateProfile(user.name, user.email, base64Image);
           toast.success('Profile picture updated successfully!');
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : 'Failed to update profile picture');
+          const errorMsg = err instanceof Error ? err.message : 'Failed to update profile picture';
+          toast.error(errorMsg);
+          console.error('Profile update error:', err);
         } finally {
           setUploadingImage(false);
         }
@@ -135,9 +145,9 @@ export const UserProfile: React.FC = () => {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Check file size (limit to 2MB)
-      if (file.size > 2 * 1024 * 1024) {
-        setError('Image size must be less than 2MB');
+      // Check file size (limit to 500KB for upload)
+      if (file.size > 500 * 1024) {
+        setError('Image size must be less than 500KB');
         return;
       }
 
@@ -149,7 +159,13 @@ export const UserProfile: React.FC = () => {
 
       const reader = new FileReader();
       reader.onloadend = () => {
-        setEditProfilePicture(reader.result as string);
+        const base64 = reader.result as string;
+        // Check base64 size
+        if (base64.length > 1000000) {
+          setError('Image too large after conversion. Please choose a smaller image.');
+          return;
+        }
+        setEditProfilePicture(base64);
         setError('');
       };
       reader.readAsDataURL(file);
